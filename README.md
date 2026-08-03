@@ -63,7 +63,8 @@ mobile capture app
   SKU-level detail only where variant evidence actually exists (own brands + key competitors).
   Same-brand *twins* - visually identical packaging across weights/flavors - are handled
   honestly: the pipeline reports the brand and marks the variant as undetermined instead of
-  guessing (measured: ~94% of variant-ambiguous boxes carry no readable weight/volume text at all).
+  guessing (our OCR pipeline found an explicit weight token in only 5.6% of 39,253
+  variant-ambiguous crops over a 30-day window).
 - **GPU inference:** detection, embeddings, OCR, and the VLM run on a self-hosted **NVIDIA H200**.
 
 ## My role
@@ -120,7 +121,8 @@ overstate accuracy on correlated shelf crops.
 
 ## Deep dives
 
-- [Evaluation honesty](docs/evaluation.md) - population-level validation, grouped splits, the human-ceiling benchmark (76.4%)
+- [Expert-readability ceiling](docs/human-ceiling.md) - the pre-registered protocol, the 31.6% + 68.4% x 65.5% = 76.4% arithmetic, interval method, limitations
+- [Evaluation honesty](docs/evaluation.md) - population-level validation, grouped splits
 - [Production lessons](docs/production-lessons.md) - shadow rollouts, pre-registered gates, config drift made impossible
 - [Metric learning](docs/metric-learning.md) - ArcFace packshot→shelf (R@1 19%→75%), the re-ranker that was killed, gallery doctrine
 
