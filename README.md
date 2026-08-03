@@ -8,8 +8,6 @@
 **Keywords:** shelf detection · share of shelf · SKU recognition · planogram · retail analytics ·
 merchandising computer vision · YOLO · DINOv2 · Qdrant · vision-language OCR
 
-> A computer-vision pipeline that turns field-merchandiser shelf photos into structured
-> share-of-shelf, assortment, and competitor analytics - designed and built end-to-end.
 
 ![Live pipeline output: detected packs, brand/SKU labels, price tags, and honest "unknown" abstentions on a real store shelf](assets/shelf-detection-live.jpg)
 
@@ -27,6 +25,12 @@ without manual tagging, and accurately enough to drive business decisions. The h
 an **honest** number. A pipeline that confidently mislabels competitor packs as own product
 inflates the headline metric - so abstaining ("Unknown") is preferable to a confident wrong
 answer.
+
+## Business impact
+
+- Automated shelf analysis at production scale: ~300k product boxes per month across ~120 shelf installations.
+- Provided measurable share-of-shelf, assortment coverage, competitor presence, and package-format analytics from field photos.
+- Reduced dependence on manual shelf tagging while preserving trustworthy metrics through explicit Unknown classifications.
 
 ## Architecture
 
@@ -72,12 +76,12 @@ uncontrolled production inference.
 
 ## Stack
 
-`PyTorch` · `YOLO / open-vocabulary detection` · `DINOv2` · `Vision-Language OCR` · `Qdrant` ·
-`RAG` · `ArcFace metric learning` · `FastAPI` · `PostgreSQL` · `self-hosted S3-compatible object
+`PyTorch` · `YOLO / open-vocabulary detection` · `DINOv2` · `Vision-Language OCR` · `vector retrieval` · `KNN matching` · `Qdrant` · `ArcFace metric learning` · `FastAPI` · `PostgreSQL` · `self-hosted S3-compatible object
 storage` · `Docker` · `NVIDIA H200 GPU inference`
 
 ## Results
 
+- **1,200+ SKU catalog**, 14k confirmed-crop visual gallery feeding the KNN track.
 - **Detection F1: 0.68 → 0.91 on unseen (out-of-sample) photos.**
 - **Catalog normalization: 34 → 20 categories** - collapsing duplicated/ambiguous classes that
   were degrading matching.
@@ -88,16 +92,6 @@ storage` · `Docker` · `NVIDIA H200 GPU inference`
   on visual embeddings, lifting recall on that class from ~14% to the mid-90s while holding high
   precision - promoted to production behind a validated allowlist.
 
-- **Production scale:** ~300k product boxes/month across ~120 shelf installations;
-  1,200+ SKU catalog; 14k confirmed-crop visual gallery feeding the KNN track.
-- **Human-ceiling benchmark:** a blind, pre-registered protocol measured the *human*
-  brand-readability ceiling at **76.4%** on unrecognized boxes - expressing pipeline performance
-  as a % of that ceiling reframed the remaining gap as a catalog-boundary question, not
-  engineering debt.
-- **Config-drift class eliminated:** a brand-token list feeding the competitor guardrail had
-  silently diverged from its source-of-truth DB table (~775 boxes/month of avoidable Unknowns);
-  fixed by *generating* the config from the DB - drift is now impossible by construction.
-  Admission was gated to brand level only, after an eyes-on replay review of every stratum.
 
 ## Engineering highlights
 
@@ -107,15 +101,28 @@ storage` · `Docker` · `NVIDIA H200 GPU inference`
 - **Pre-registered gates:** acceptance thresholds are written and committed *before* the
   evaluation page is opened - per-stratum thresholds and stop-rules ("any false admission on
   an own product reverts the whole package"), making reviews anchoring-proof.
-- **Shadow → active rollout:** every model/guardrail change runs in shadow and is measured on a
-  real population before promotion; promotions are gated and reversible in one step.
-- **Evaluation honesty:** I learned (and enforced) that curated subsets overstate accuracy -
-  a resolver measuring 98% on a curated set dropped to ~82% on the full population, so validation
-  is always population-level before any production change.
-- **Metric-learning track:** an ArcFace head on frozen visual embeddings closed a large
-  packshot→shelf retrieval gap (R@1 ~19% → ~75%); I killed a re-ranking variant after measuring
-  that it inverted accuracy on disputed cases - negative results acted on, not shipped.
 
+
+## Runnable examples
+
+No production code is published, but the *decision logic shape* and the evaluation
+discipline are runnable (stdlib only, Python 3.10+):
+
+```
+python3 examples/fusion_demo.py   # fusion + abstaining guardrails on synthetic crops
+python3 examples/evaluate.py      # precision/recall/F1 + abstention rate; grouped-by-image splits
+```
+
+`fusion_demo.py` walks six synthetic crops through the priority-ordered fusion and
+prints which rule decided each - including the three abstention paths. `evaluate.py`
+shows why metrics must report abstention explicitly and why naive random splits
+overstate accuracy on correlated shelf crops.
+
+## Deep dives
+
+- [Evaluation honesty](docs/evaluation.md) - population-level validation, grouped splits, the human-ceiling benchmark (76.4%)
+- [Production lessons](docs/production-lessons.md) - shadow rollouts, pre-registered gates, config drift made impossible
+- [Metric learning](docs/metric-learning.md) - ArcFace packshot→shelf (R@1 19%→75%), the re-ranker that was killed, gallery doctrine
 
 ---
 
