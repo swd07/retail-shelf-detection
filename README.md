@@ -1,0 +1,128 @@
+# Retail Shelf Detection — Share-of-Shelf Computer Vision Pipeline
+
+> Production CV pipeline that turns retail shelf photos into **share-of-shelf**,
+> **SKU recognition / assortment**, and price-tag analytics. Case study of a live system:
+> architecture, guardrails, honest metrics (detection F1 0.68 → 0.91), and the evaluation
+> discipline that keeps it honest.
+
+**Keywords:** shelf detection · share of shelf · SKU recognition · planogram · retail analytics ·
+merchandising computer vision · YOLO · DINOv2 · Qdrant · vision-language OCR
+
+> A computer-vision pipeline that turns field-merchandiser shelf photos into structured
+> share-of-shelf, assortment, and competitor analytics - designed and built end-to-end.
+
+![Live pipeline output: detected packs, brand/SKU labels, price tags, and honest "unknown" abstentions on a real store shelf](assets/shelf-detection-live.jpg)
+
+*Live output on a real shelf: product boxes with brand/SKU labels, price-tag detections with read prices, and explicit `unknown` abstentions where evidence is insufficient — the honest-Unknown design below, visible in production.*
+
+## Problem
+
+Measure on-shelf reality at scale, directly from photos:
+
+- **share of shelf** (own brand vs. competitors),
+- **assortment coverage** (which SKUs are present),
+- **package/format and size mix**,
+
+without manual tagging, and accurately enough to drive business decisions. The hard constraint:
+an **honest** number. A pipeline that confidently mislabels competitor packs as own product
+inflates the headline metric - so abstaining ("Unknown") is preferable to a confident wrong
+answer.
+
+## Architecture
+
+![Shelf detection CV pipeline](assets/shelf-detection-pipeline.png)
+
+A staged, asynchronous pipeline with self-hosted GPU inference:
+
+```
+mobile capture app
+   → ingestion API → durable work queue → async worker
+        → object detection (YOLO / open-vocabulary)         # localize packs
+        → OCR + Vision-Language model                       # read brand/label text
+        → visual embeddings (DINOv2 ViT-L/14)               # KNN over a confirmed-product gallery
+        → retrieval-augmented matching (vector DB: Qdrant)  # SKU identification
+        → rule-based fusion + guardrail layer               # combine signals, abstain when unsure
+        → metrics (share of shelf, assortment, coverage)
+```
+
+- **Detection:** YOLO and open-vocabulary detection localize product packs; a dedup stage removes
+  contained/overlapping/duplicate boxes and shelf-band false positives.
+- **OCR / VLM:** each crop is read by a Vision-Language OCR model; brand tokens are matched
+  against a normalized brand vocabulary.
+- **Embeddings + retrieval:** DINOv2 visual embeddings feed a KNN gallery of confirmed products;
+  in parallel, retrieval over a **Qdrant** vector database provides SKU candidates.
+- **Fusion + guardrails:** a rule-based layer fuses OCR / retrieval / visual evidence with an
+  explicit priority order, and a set of guardrails reject or relabel low-evidence matches. A
+  geometry-based *within-shelf* resolver disambiguates same-brand siblings (e.g. weight/format
+  variants) using bounding-box layout when the label text is unreadable.
+- **Hybrid reporting tier:** share-of-shelf is reported at **brand+type** level by default;
+  SKU-level detail only where variant evidence actually exists (own brands + key competitors).
+  Same-brand *twins* - visually identical packaging across weights/flavors - are handled
+  honestly: the pipeline reports the brand and marks the variant as undetermined instead of
+  guessing (measured: ~94% of variant-ambiguous boxes carry no readable weight/volume text at all).
+- **GPU inference:** detection, embeddings, OCR, and the VLM run on a self-hosted **NVIDIA H200**.
+
+## My role
+
+I designed and built the **entire pipeline**: detector integration and dedup, the OCR/VLM and
+embedding services, the retrieval/matching layer, the fusion and guardrail logic, the within-shelf
+geometric resolver, the training/evaluation harness, and the catalog-normalization tooling. I used
+LLMs as a **teacher/auditor** for label adjudication and dataset construction - never as
+uncontrolled production inference.
+
+## Stack
+
+`PyTorch` · `YOLO / open-vocabulary detection` · `DINOv2` · `Vision-Language OCR` · `Qdrant` ·
+`RAG` · `ArcFace metric learning` · `FastAPI` · `PostgreSQL` · `self-hosted S3-compatible object
+storage` · `Docker` · `NVIDIA H200 GPU inference`
+
+## Results
+
+- **Detection F1: 0.68 → 0.91 on unseen (out-of-sample) photos.**
+- **Catalog normalization: 34 → 20 categories** - collapsing duplicated/ambiguous classes that
+  were degrading matching.
+- **~300 false positives eliminated** via a targeted regex/normalization fix in the label path.
+- **Package classifier ~92% overall accuracy**, evaluated leak-free with grouped-by-image splits
+  and cross-store stress tests (one photo can contain many correlated crops, so naive splits leak).
+- Solved a long-standing **canister-vs-bottle** confusion by training a dedicated calibrated head
+  on visual embeddings, lifting recall on that class from ~14% to the mid-90s while holding high
+  precision - promoted to production behind a validated allowlist.
+
+- **Production scale:** ~300k product boxes/month across ~120 shelf installations;
+  1,200+ SKU catalog; 14k confirmed-crop visual gallery feeding the KNN track.
+- **Human-ceiling benchmark:** a blind, pre-registered protocol measured the *human*
+  brand-readability ceiling at **76.4%** on unrecognized boxes - expressing pipeline performance
+  as a % of that ceiling reframed the remaining gap as a catalog-boundary question, not
+  engineering debt.
+- **Config-drift class eliminated:** a brand-token list feeding the competitor guardrail had
+  silently diverged from its source-of-truth DB table (~775 boxes/month of avoidable Unknowns);
+  fixed by *generating* the config from the DB - drift is now impossible by construction.
+  Admission was gated to brand level only, after an eyes-on replay review of every stratum.
+
+## Engineering highlights
+
+- **Honest-Unknown design:** guardrails explicitly abstain; I quantified that a large share of
+  "Unknown" boxes were *intentional competitor rejections*, not coverage gaps - important context
+  for interpreting the headline metric correctly.
+- **Pre-registered gates:** acceptance thresholds are written and committed *before* the
+  evaluation page is opened - per-stratum thresholds and stop-rules ("any false admission on
+  an own product reverts the whole package"), making reviews anchoring-proof.
+- **Shadow → active rollout:** every model/guardrail change runs in shadow and is measured on a
+  real population before promotion; promotions are gated and reversible in one step.
+- **Evaluation honesty:** I learned (and enforced) that curated subsets overstate accuracy -
+  a resolver measuring 98% on a curated set dropped to ~82% on the full population, so validation
+  is always population-level before any production change.
+- **Metric-learning track:** an ArcFace head on frozen visual embeddings closed a large
+  packshot→shelf retrieval gap (R@1 ~19% → ~75%); I killed a re-ranking variant after measuring
+  that it inverted accuracy on disputed cases - negative results acted on, not shipped.
+
+
+---
+
+## About
+
+This is a case-study repository for a **production** system I built and operate end-to-end as the
+sole engineer (code is private — it runs inside a commercial environment).
+
+- Full portfolio with more case studies: **[ai-platform-portfolio](https://github.com/swd07/ai-platform-portfolio)**
+- Author: **Eduard Kharaev** — [profile](https://github.com/swd07) · haraev87@gmail.com · TG [@Edharaev](https://t.me/Edharaev)
