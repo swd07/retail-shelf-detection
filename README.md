@@ -1,137 +1,346 @@
-# Retail Shelf Detection — Share-of-Shelf Computer Vision Pipeline
+# Retail Shelf Detection — Production Retrieval & Multimodal Shelf Intelligence
 
-> Production CV pipeline that turns retail shelf photos into **share-of-shelf**,
-> **SKU recognition / assortment**, and price-tag analytics. Case study of a live system:
-> architecture, guardrails, honest metrics (detection F1 0.68 → 0.91), and the evaluation
-> discipline that keeps it honest.
+> Technical case-study repository for a live merchandising AI subsystem: detection, OCR/VLM,
+> dense retrieval, visual metric learning, deterministic fusion, guardrails, evaluation and
+> gated production rollout.
 
-**Keywords:** shelf detection · share of shelf · SKU recognition · planogram · retail analytics ·
-merchandising computer vision · YOLO · DINOv2 · Qdrant · vision-language OCR
+**Portfolio overview:** [ai-platform-portfolio](https://github.com/swd07/ai-platform-portfolio)  
+**Parent product:** [AI Chaban2 — commercial operating platform](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)
 
+![Live pipeline output: detected packs, brand/SKU labels, price tags, and explicit unknown abstentions](assets/shelf-detection-live.jpg)
 
-![Live pipeline output: detected packs, brand/SKU labels, price tags, and honest "unknown" abstentions on a real store shelf](assets/shelf-detection-live.jpg)
-
-*Live output on a real shelf: product boxes with brand/SKU labels, price-tag detections with read prices, and explicit `unknown` abstentions where evidence is insufficient — the honest-Unknown design below, visible in production.*
-
-## Problem
-
-Measure on-shelf reality at scale, directly from photos:
-
-- **share of shelf** (own brand vs. competitors),
-- **assortment coverage** (which SKUs are present),
-- **package/format and size mix**,
-
-without manual tagging, and accurately enough to drive business decisions. The hard constraint:
-an **honest** number. A pipeline that confidently mislabels competitor packs as own product
-inflates the headline metric - so abstaining ("Unknown") is preferable to a confident wrong
-answer.
-
-## Business impact
-
-- Automated shelf analysis at production scale: ~300k product boxes per month across ~120 shelf installations.
-- Provided measurable share-of-shelf, assortment coverage, competitor presence, and package-format analytics from field photos.
-- Reduced dependence on manual shelf tagging while preserving trustworthy metrics through explicit Unknown classifications.
-
-## Architecture
-
-![Shelf detection CV pipeline](assets/shelf-detection-pipeline.png)
-
-A staged, asynchronous pipeline with self-hosted GPU inference:
-
-```
-mobile capture app
-   → ingestion API → durable work queue → async worker
-        → object detection (YOLO / open-vocabulary)         # localize packs
-        → OCR + Vision-Language model                       # read brand/label text
-        → visual embeddings (DINOv2 ViT-L/14)               # KNN over a confirmed-product gallery
-        → retrieval-augmented matching (vector DB: Qdrant)  # SKU identification
-        → rule-based fusion + guardrail layer               # combine signals, abstain when unsure
-        → metrics (share of shelf, assortment, coverage)
-```
-
-- **Detection:** YOLO and open-vocabulary detection localize product packs; a dedup stage removes
-  contained/overlapping/duplicate boxes and shelf-band false positives.
-- **OCR / VLM:** each crop is read by a Vision-Language OCR model; brand tokens are matched
-  against a normalized brand vocabulary.
-- **Embeddings + retrieval:** DINOv2 visual embeddings feed a KNN gallery of confirmed products;
-  in parallel, retrieval over a **Qdrant** vector database provides SKU candidates.
-- **Fusion + guardrails:** a rule-based layer fuses OCR / retrieval / visual evidence with an
-  explicit priority order, and a set of guardrails reject or relabel low-evidence matches. A
-  geometry-based *within-shelf* resolver disambiguates same-brand siblings (e.g. weight/format
-  variants) using bounding-box layout when the label text is unreadable.
-- **Hybrid reporting tier:** share-of-shelf is reported at **brand+type** level by default;
-  SKU-level detail only where variant evidence actually exists (own brands + key competitors).
-  Same-brand *twins* - visually identical packaging across weights/flavors - are handled
-  honestly: the pipeline reports the brand and marks the variant as undetermined instead of
-  guessing (our OCR pipeline found an explicit weight token in only 5.6% of 39,253
-  variant-ambiguous crops over a 30-day window).
-- **GPU inference:** detection, embeddings, OCR, and the VLM run on a self-hosted **NVIDIA H200**.
-
-## My role
-
-I designed and built the **entire pipeline**: detector integration and dedup, the OCR/VLM and
-embedding services, the retrieval/matching layer, the fusion and guardrail logic, the within-shelf
-geometric resolver, the training/evaluation harness, and the catalog-normalization tooling. I used
-LLMs as a **teacher/auditor** for label adjudication and dataset construction - never as
-uncontrolled production inference.
-
-## Stack
-
-`PyTorch` · `YOLO / open-vocabulary detection` · `DINOv2` · `Vision-Language OCR` · `vector retrieval` · `KNN matching` · `Qdrant` · `ArcFace metric learning` · `FastAPI` · `PostgreSQL` · `self-hosted S3-compatible object
-storage` · `Docker` · `NVIDIA H200 GPU inference`
-
-## Results
-
-- **1,200+ SKU catalog**, 14k confirmed-crop visual gallery feeding the KNN track.
-- **Detection F1: 0.68 → 0.91 on unseen (out-of-sample) photos.**
-- **Catalog normalization: 34 → 20 categories** - collapsing duplicated/ambiguous classes that
-  were degrading matching.
-- **~300 false positives eliminated** via a targeted regex/normalization fix in the label path.
-- **Package classifier ~92% overall accuracy**, evaluated leak-free with grouped-by-image splits
-  and cross-store stress tests (one photo can contain many correlated crops, so naive splits leak).
-- Solved a long-standing **canister-vs-bottle** confusion by training a dedicated calibrated head
-  on visual embeddings, lifting recall on that class from ~14% to the mid-90s while holding high
-  precision - promoted to production behind a validated allowlist.
-
-
-## Engineering highlights
-
-- **Honest-Unknown design:** guardrails explicitly abstain; I quantified that a large share of
-  "Unknown" boxes were *intentional competitor rejections*, not coverage gaps - important context
-  for interpreting the headline metric correctly.
-- **Pre-registered gates:** acceptance thresholds are written and committed *before* the
-  evaluation page is opened - per-stratum thresholds and stop-rules ("any false admission on
-  an own product reverts the whole package"), making reviews anchoring-proof.
-
-
-## Runnable examples
-
-No production code is published, but the *decision logic shape* and the evaluation
-discipline are runnable (stdlib only, Python 3.10+):
-
-```
-python3 examples/fusion_demo.py   # fusion + abstaining guardrails on synthetic crops
-python3 examples/evaluate.py      # precision/recall/F1 + abstention rate; grouped-by-image splits
-```
-
-`fusion_demo.py` walks six synthetic crops through the priority-ordered fusion and
-prints which rule decided each - including the three abstention paths. `evaluate.py`
-shows why metrics must report abstention explicitly and why naive random splits
-overstate accuracy on correlated shelf crops.
-
-## Deep dives
-
-- [Expert-readability ceiling](docs/human-ceiling.md) - the pre-registered protocol, the 31.6% + 68.4% x 65.5% = 76.4% arithmetic, interval method, limitations
-- [Evaluation honesty](docs/evaluation.md) - population-level validation, grouped splits
-- [Production lessons](docs/production-lessons.md) - shadow rollouts, pre-registered gates, config drift made impossible
-- [Metric learning](docs/metric-learning.md) - ArcFace packshot→shelf (R@1 19%→75%), the re-ranker that was killed, gallery doctrine
+*Real shelf output: localized packs, brand/SKU labels, price-tag reads and explicit `unknown`
+when the evidence is not strong enough.*
 
 ---
 
-## About
+## Status
 
-This is a case-study repository for a **production** system I built and operate end-to-end as the
-sole engineer (code is private — it runs inside a commercial environment).
+This is **production engineering with a pilot business rollout**.
 
-- Full portfolio with more case studies: **[ai-platform-portfolio](https://github.com/swd07/ai-platform-portfolio)**
-- Author: **Eduard Kharaev** — [profile](https://github.com/swd07) · haraev87@gmail.com · TG [@Edharaev](https://t.me/Edharaev)
+- **6,145+ shelf photos** processed in the merchandising subsystem.
+- **5,882 completed analyses** in the audited production queue.
+- Current rollout: **40 retail outlets / 3 merchandising users**.
+- **~320k OCR calls** processed by the production service.
+- **~108k ArcFace shadow evaluations** recorded.
+
+The engineering pipeline is live; the organizational rollout is still intentionally limited.
+
+---
+
+## Problem
+
+A shelf photo has to become trustworthy commercial data:
+
+- **share of shelf** — own brand vs competitors;
+- **assortment coverage** — which brands/SKUs are present;
+- **package / format / size mix**;
+- **price-tag evidence**;
+- inputs for merchandising review and execution analytics.
+
+The difficult cases are not obvious detections. They are visually similar sibling products that
+differ only by weight, fat percentage, flavour, label detail or package format.
+
+For this problem, a confident wrong own-vs-competitor decision is worse than returning
+`unknown`. The system is therefore designed around **evidence, abstention and reproducible
+post-mortems**, not maximum forced coverage.
+
+---
+
+## Production architecture
+
+```text
+Android capture terminal
+  → ingest API
+  → object storage + durable queue
+  → async analysis worker
+  → GroundingDINO detection
+  → Qwen2.5-VL OCR / package reading
+  → Qwen3-Embedding-8B
+  → Qdrant dense text retrieval
+  → attribute-aware reranking
+  → DINOv2 visual k-NN
+  → fine-tuned ArcFace metric retrieval
+  → deterministic signal fusion
+  → evidence guardrails
+  → SKU / brand / unknown
+  → share-of-shelf / assortment / competitor analytics
+```
+
+The production AI stack is self-hosted on owned NVIDIA H200 infrastructure.
+
+The LLM **does not choose the final SKU**. It extracts textual and package evidence; the final
+identity is selected by a deterministic decision layer that combines independent retrieval and
+visual signals.
+
+---
+
+## Capture and ingestion
+
+The merchandising terminal is a native **Kotlin / Jetpack Compose** Android application with
+**Room + WorkManager** for offline capture and deferred upload.
+
+The ingest layer provides:
+
+- authenticated photo upload;
+- SHA-256 duplicate protection;
+- object storage for media;
+- durable analysis queue;
+- asynchronous workers;
+- production provenance linking analysis to code/config revisions.
+
+This separates field capture from GPU inference so temporary network or inference failures do not
+block the user from taking the next shelf photo.
+
+---
+
+## Detection
+
+**GroundingDINO** localizes product regions before recognition. Earlier detector work also included
+closed-set / YOLO experiments and deduplication logic for contained, overlapping and shelf-band
+false-positive regions.
+
+A separate detector track improved measured **F1 from 0.68 → 0.91 on unseen shelf photos**.
+
+Detection is treated as one stage of the recognition system rather than the final business metric:
+a good box can still become an incorrect SKU, so downstream retrieval/evidence gates remain
+mandatory.
+
+---
+
+## OCR / VLM evidence
+
+Each product crop is read by self-hosted **Qwen2.5-VL-72B-AWQ** served through vLLM.
+
+The VLM extracts evidence such as:
+
+- brand text;
+- product-name fragments;
+- weight / volume;
+- fat percentage;
+- flavour/category clues;
+- package-form clues.
+
+OCR/VLM output is evidence for retrieval and guardrails. It is not trusted as a final classifier.
+
+---
+
+## Dense retrieval
+
+### Catalog representation
+
+Each retrieval entry is represented as structured product text combining attributes such as:
+
+`brand + name + category + subcategory + flavour + fat% + weight + volume + package_type + visual_markers`
+
+Embeddings are produced by a self-hosted **Qwen3-Embedding-8B** service.
+
+### Qdrant search
+
+For each detected crop:
+
+1. OCR/VLM produces the available text evidence.
+2. The query is embedded with **Qwen3-Embedding-8B**.
+3. **Qdrant** performs cosine dense retrieval.
+4. Production retrieval depth is **top-20**.
+5. Reliable brand evidence can activate brand-filtered candidate narrowing.
+6. Candidates are reranked with structured attributes such as brand, weight, fat percentage,
+   category and package evidence.
+
+The embedding vector is **4096-dimensional and normalized**.
+
+The production vector collection contains **1,345 retrieval entries**. The broader merchandising
+catalog contains approximately **1.5k own + competitor SKUs**, so not every merchandising catalog
+record is necessarily represented identically in the vector collection.
+
+---
+
+## Multimodal retrieval
+
+Dense text retrieval is only one path.
+
+In parallel, the production system uses:
+
+- **DINOv2 ViT-L/14** for general visual embeddings and k-NN retrieval;
+- a fine-tuned **ArcFace** metric-learning encoder for independent visual votes;
+- OCR-derived brand and product-attribute evidence;
+- package-form evidence for ambiguous families.
+
+The working galleries are on the order of tens of thousands of confirmed/reference crops
+(approximately 18.9k DINOv2 confirmed crops and 9.1k ArcFace references in the audited retrieval
+configuration).
+
+A typical decision ladder can look like:
+
+```text
+OCR brand + visual agreement
+→ OCR brand + dense retrieval
+→ strong dense retrieval
+→ dense retrieval + independent visual support
+→ visual retrieval
+→ weak evidence
+→ unknown
+```
+
+Every final prediction stores enough provenance — decision path, scores, thresholds and supporting
+signals — to reconstruct why the system made that decision.
+
+---
+
+## Deterministic fusion and guardrails
+
+The acceptance layer is deliberately conservative.
+
+Examples of production guardrails include:
+
+- OCR **brand verification**;
+- **competitor protection** to reduce own/competitor contamination;
+- retrieval-evidence gates requiring independent support for weak candidates;
+- **package-form** protection for bottle / canister / carton ambiguity;
+- **ArcFace rescue** when the metric-learning signal is stronger than the primary visual path;
+- **price-tag / promo rejection** so non-product regions do not enter product metrics;
+- sibling / weight evidence where available.
+
+Low-evidence cases become **`unknown`** instead of being forced into a SKU.
+
+That abstention is part of the product design: share-of-shelf and assortment numbers are only useful
+if the system is allowed to say that it does not know.
+
+---
+
+## Evaluation as production architecture
+
+Evaluation is not a notebook step performed after model training. It is part of the release path.
+
+The system uses:
+
+- human-labelled **golden sets**;
+- stratification by failure mode;
+- grouped / cross-store validation to reduce leakage;
+- distractor and hard-negative sets;
+- **Recall@1 / Recall@5** for retrieval tracks;
+- FPR-anchored precision calibration;
+- Wilson confidence intervals for small strata;
+- pre-registered **acceptance / kill thresholds**;
+- a **47k-box production replay harness** that imports the real production decision module;
+- shadow tables / candidate-model telemetry;
+- nightly regression checks.
+
+Candidate changes are promoted through:
+
+```text
+off → shadow → active
+```
+
+This process has rejected rerankers and encoder replacements that looked promising locally but
+weakened controlled production evaluation.
+
+---
+
+## Measured results
+
+### End-to-end
+
+- **Brand precision: 95.8%** on the confirmed end-to-end golden set.
+- **SKU precision: 73.1% end-to-end**.
+- Bare retrieval alone was approximately **29% SKU precision** before the full cascade,
+  independent visual evidence and guardrails.
+
+### Retrieval / metric learning
+
+- Fine-tuned ArcFace cross-store **Recall@1: 84.1%** on the audited benchmark.
+- DINOv2 baseline on the same benchmark: **26.4% Recall@1**.
+- Human readability ceiling on the unresolved tail: **76.4% ± 5.8 pp** under a blind,
+  pre-registered protocol.
+
+### Production telemetry
+
+- **~320k OCR calls** processed.
+- **~108k ArcFace shadow evaluations**.
+- **6k+ shelf photos** in the merchandising system.
+- **5,882 completed production analyses** in the audited queue.
+
+---
+
+## What this is — and is not
+
+This is a **production retrieval-augmented recognition system**.
+
+It is **not** a classic document-question-answering RAG application:
+
+- retrieved catalog candidates do not become documents for an LLM answer;
+- the LLM does not generate the final SKU identity;
+- there is no document-citation path in production;
+- final identity comes from explainable fusion of retrieval, visual and attribute evidence.
+
+For this business problem, deterministic fusion and calibrated abstention provide stronger control
+than asking an LLM to make the final identity decision.
+
+---
+
+## My role
+
+For the broader AI Chaban2 platform I am the **Technical Owner / platform architect**.
+
+For this merchandising AI subsystem I owned the technical architecture and production rollout and
+was hands-on in:
+
+- retrieval / matching architecture;
+- OCR/VLM and embedding services;
+- Qdrant retrieval and attribute reranking;
+- multimodal fusion and guardrails;
+- golden sets, replay evaluation and kill criteria;
+- metric-learning evaluation;
+- production inference / rollout methodology;
+- incident and operational tooling around the pipeline.
+
+The broader commercial platform is delivered with an engineering team; this repository therefore
+focuses on the AI subsystem and the technical work I can substantiate rather than claiming all
+platform implementation as solo authorship.
+
+---
+
+## Stack
+
+`Python` · `FastAPI` · `PyTorch` · `GroundingDINO` · `Qwen2.5-VL-72B-AWQ` ·
+`Qwen3-Embedding-8B` · `Qdrant` · `DINOv2 ViT-L/14` · `ArcFace` · `vLLM` ·
+`PostgreSQL` · `MinIO / S3-compatible storage` · `Kotlin` · `Jetpack Compose` ·
+`Room` · `WorkManager` · `Docker` · `systemd / cron` · `NVIDIA H200`
+
+---
+
+## Runnable examples
+
+Production code and commercial data are private, but this repository includes small runnable
+examples of the **decision-logic shape and evaluation discipline**:
+
+```bash
+python3 examples/fusion_demo.py
+python3 examples/evaluate.py
+```
+
+`fusion_demo.py` walks synthetic crops through priority-ordered fusion, including abstention paths.
+`evaluate.py` demonstrates precision/recall/F1, abstention rate and why naive random splits can
+inflate metrics on correlated shelf crops.
+
+---
+
+## Deep dives
+
+- [Expert-readability ceiling](docs/human-ceiling.md) — blind protocol, ceiling calculation,
+  intervals and limitations.
+- [Evaluation honesty](docs/evaluation.md) — population-level validation and grouped splits.
+- [Production lessons](docs/production-lessons.md) — shadow rollout, pre-registered gates and
+  config-drift prevention.
+- [Metric learning](docs/metric-learning.md) — ArcFace shelf retrieval, gallery doctrine and
+  rejected candidates.
+
+---
+
+## Related work
+
+- **[Full Applied AI / Solutions Architecture portfolio](https://github.com/swd07/ai-platform-portfolio)**
+- **[AI Chaban2 commercial platform case study](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)**
+
+Author: **Eduard Kharaev** — [GitHub profile](https://github.com/swd07) ·
+[haraev87@gmail.com](mailto:haraev87@gmail.com) · Telegram [@Edharaev](https://t.me/Edharaev)
