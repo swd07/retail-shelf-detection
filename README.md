@@ -1,11 +1,12 @@
 # Retail Shelf Detection — Production Retrieval & Multimodal Shelf Intelligence
 
-> Technical case-study repository for a live merchandising AI subsystem: detection, OCR/VLM,
-> dense retrieval, visual metric learning, deterministic fusion, guardrails, evaluation and
-> gated production rollout.
+> Technical case-study repository for a live merchandising AI subsystem: offline field capture,
+> detection, OCR/VLM, dense retrieval, visual metric learning, deterministic fusion, guardrails,
+> evaluation and gated production rollout.
 
 **Portfolio overview:** [ai-platform-portfolio](https://github.com/swd07/ai-platform-portfolio)  
-**Parent product:** [AI Chaban2 — commercial operating platform](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)
+**Parent product:** [AI Chaban2 — commercial operating platform](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)  
+**Field-product deep dive:** [Offline Merchandising Terminal](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/merch-terminal.md)
 
 ![Live pipeline output: detected packs, brand/SKU labels, price tags, and explicit unknown abstentions](assets/shelf-detection-live.jpg)
 
@@ -45,14 +46,20 @@ For this problem, a confident wrong own-vs-competitor decision is worse than ret
 `unknown`. The system is therefore designed around **evidence, abstention and reproducible
 post-mortems**, not maximum forced coverage.
 
+There is also a non-model problem: retail capture happens under weak connectivity, app interruption
+and device restarts. A model pipeline is not production-ready if the field user cannot reliably
+create and synchronize the input data.
+
 ---
 
-## Production architecture
+## End-to-end production architecture
 
 ```text
-Android capture terminal
+Native Android field terminal
+  → Room-backed durable photo queue
+  → network-aware WorkManager synchronization
   → ingest API
-  → object storage + durable queue
+  → object storage + durable analysis queue
   → async analysis worker
   → GroundingDINO detection
   → Qwen2.5-VL OCR / package reading
@@ -75,10 +82,68 @@ visual signals.
 
 ---
 
-## Capture and ingestion
+## Field product — offline-first Android terminal
 
-The merchandising terminal is a native **Kotlin / Jetpack Compose** Android application with
-**Room + WorkManager** for offline capture and deferred upload.
+The merchandising terminal is a native **Kotlin / Jetpack Compose** application built for actual
+store conditions rather than a thin camera screen.
+
+### Durable work before upload
+
+Captured photos enter a **Room-backed local queue** with the shelf/display and capture context needed
+for delayed delivery. The field user can keep working before the network request or GPU analysis
+finishes.
+
+The queue supports:
+
+- pending / upload / failure state visible to the user;
+- per-photo retry and delete;
+- bulk send;
+- periodic synchronization through **WorkManager**;
+- immediate retry when connectivity changes from offline to online;
+- recovery of records left in an in-flight state after process/device interruption.
+
+The recovery path is important: a mobile process can die mid-upload, so `UPLOADING` cannot be treated
+as an eternal terminal state.
+
+### Offline shelf registry
+
+Later iterations moved more than the media queue offline. The application caches the shelf/display
+registry in Room and can fall back to the local copy when the API is unavailable. Cover images use
+disk caching and can be pre-warmed after connectivity returns.
+
+Actions that require authoritative server state are explicitly guarded while offline rather than
+pretending every mutation succeeded locally.
+
+### Analysis vs planogram mode
+
+The same field application distinguishes normal analysis capture from **planogram** work.
+
+A merchandiser can move through:
+
+```text
+store → shelf/display → capture → local queue → analysis
+```
+
+or:
+
+```text
+store → shelf/display → planogram image → shelf-zone annotation → sync
+```
+
+The on-device shelf-zone editor supports drawing regions over an image, dragging existing regions and
+resizing them with edge/corner handles. This keeps structured correction close to the physical shelf,
+where the scene is easiest to understand.
+
+### Why this matters to the AI system
+
+Capture, upload and inference are independent stages. Temporary store connectivity or a busy model
+server does not block the merchandiser from taking the next shelf photo.
+
+→ **[Detailed offline field-terminal case study](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/merch-terminal.md)**
+
+---
+
+## Ingest & provenance
 
 The ingest layer provides:
 
@@ -89,8 +154,8 @@ The ingest layer provides:
 - asynchronous workers;
 - production provenance linking analysis to code/config revisions.
 
-This separates field capture from GPU inference so temporary network or inference failures do not
-block the user from taking the next shelf photo.
+This separates field capture from GPU inference and preserves enough context for delayed processing
+and later post-mortems.
 
 ---
 
@@ -264,7 +329,7 @@ weakened controlled production evaluation.
 
 ## What this is — and is not
 
-This is a **production retrieval-augmented recognition system**.
+This is a **production retrieval-augmented recognition system embedded in a field workflow**.
 
 It is **not** a classic document-question-answering RAG application:
 
@@ -282,8 +347,8 @@ than asking an LLM to make the final identity decision.
 
 For the broader AI Chaban2 platform I am the **Technical Owner / platform architect**.
 
-For this merchandising AI subsystem I owned the technical architecture and production rollout and
-was hands-on in:
+For this merchandising subsystem I owned the technical architecture and production rollout and was
+hands-on in:
 
 - retrieval / matching architecture;
 - OCR/VLM and embedding services;
@@ -292,11 +357,11 @@ was hands-on in:
 - golden sets, replay evaluation and kill criteria;
 - metric-learning evaluation;
 - production inference / rollout methodology;
-- incident and operational tooling around the pipeline.
+- end-to-end field-to-analysis architecture and operational tooling around the pipeline.
 
-The broader commercial platform is delivered with an engineering team; this repository therefore
-focuses on the AI subsystem and the technical work I can substantiate rather than claiming all
-platform implementation as solo authorship.
+The broader commercial platform and mobile application were delivered with an engineering team; this
+repository therefore focuses on the subsystem and technical work I can substantiate rather than
+claiming all implementation as solo authorship.
 
 ---
 
@@ -305,7 +370,7 @@ platform implementation as solo authorship.
 `Python` · `FastAPI` · `PyTorch` · `GroundingDINO` · `Qwen2.5-VL-72B-AWQ` ·
 `Qwen3-Embedding-8B` · `Qdrant` · `DINOv2 ViT-L/14` · `ArcFace` · `vLLM` ·
 `PostgreSQL` · `MinIO / S3-compatible storage` · `Kotlin` · `Jetpack Compose` ·
-`Room` · `WorkManager` · `Docker` · `systemd / cron` · `NVIDIA H200`
+`Room` · `WorkManager` · `Coil` · `Docker` · `systemd / cron` · `NVIDIA H200`
 
 ---
 
@@ -327,6 +392,7 @@ inflate metrics on correlated shelf crops.
 
 ## Deep dives
 
+- [Offline field terminal](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/merch-terminal.md) — durable mobile queue, reconnect recovery, shelf cache and planogram zones.
 - [Expert-readability ceiling](docs/human-ceiling.md) — blind protocol, ceiling calculation,
   intervals and limitations.
 - [Evaluation honesty](docs/evaluation.md) — population-level validation and grouped splits.
