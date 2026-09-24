@@ -345,7 +345,8 @@ than asking an LLM to make the final identity decision.
 
 ## My role
 
-For the broader AI Chaban2 platform I am the **Technical Owner / platform architect**.
+For the broader AI Chaban2 platform I was **Head of AI and Technical Owner / platform architect**: I built
+the first production versions hands-on, then hired and led a team of **7 engineers** who extended them.
 
 For this merchandising subsystem I owned the technical architecture and production rollout and was
 hands-on in:
@@ -359,9 +360,8 @@ hands-on in:
 - production inference / rollout methodology;
 - end-to-end field-to-analysis architecture and operational tooling around the pipeline.
 
-The broader commercial platform and mobile application were delivered with an engineering team; this
-repository therefore focuses on the subsystem and technical work I can substantiate rather than
-claiming all implementation as solo authorship.
+The broader commercial platform and mobile application were extended by the team I led; this
+repository focuses on this subsystem and the technical work I did on it personally.
 
 ---
 
