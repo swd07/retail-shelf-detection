@@ -157,6 +157,9 @@ The ingest layer provides:
 This separates field capture from GPU inference and preserves enough context for delayed processing
 and later post-mortems.
 
+Analysis jobs run through a PostgreSQL queue using `FOR UPDATE SKIP LOCKED`, with up to 3 attempts
+and automatic recovery of jobs stuck for more than 30 minutes.
+
 ---
 
 ## Detection
@@ -324,6 +327,36 @@ weakened controlled production evaluation.
 - **~108k ArcFace shadow evaluations**.
 - **6k+ shelf photos** in the merchandising system.
 - **5,882 completed production analyses** in the audited queue.
+
+---
+
+## Business outputs
+
+Recognition results are not the end product. They feed a merchandising dashboard in the Chaban2
+platform:
+
+- **Share of shelf** — own vs competitor share by facings, per photo, store and brand; stores below
+  30% own share are flagged; shelf position (top / eye / middle / bottom) is recorded.
+- **SKU presence** — for each own SKU: in how many analysed stores it was found, its facings, and a
+  good / warning / critical status.
+- **Price intelligence from price tags** — own average shelf price vs the market, a price index,
+  per-category comparison with competitor brands and price spread across stores.
+- **Store markup** — shelf price vs base price per store and SKU, with a high / normal / low markup
+  status.
+
+Dashboard data is scoped by team: a manager sees only the stores of their team.
+
+### Human-in-the-loop improvement
+
+Low-evidence crops go to an **unknown inbox** (`new → reviewed → promoted / excluded`) together with
+the crop, OCR text, visual candidates and a VLM suggestion. A reviewer assigns the product, and
+promoted crops are added to the confirmed visual gallery used for DINOv2 visual re-ranking (enabled
+by a feature flag). The system improves on its own failure cases without retraining a model.
+
+### Not yet in production
+
+Shelf zones are drawn on shelf photos in the field app, but automatic **planogram-compliance**
+checking, report export and shelf alerts are on the roadmap, not in production.
 
 ---
 
