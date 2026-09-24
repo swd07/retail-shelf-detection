@@ -343,6 +343,10 @@ platform:
   per-category comparison with competitor brands and price spread across stores.
 - **Store markup** — shelf price vs base price per store and SKU, with a high / normal / low markup
   status.
+- **RRP vs shelf price** — recommended retail prices compared with the prices actually read from
+  price tags.
+- **Assortment coverage** — which own products and attributes are covered in each store, with
+  coverage gaps and competitor presence.
 
 Dashboard data is scoped by team: a manager sees only the stores of their team.
 
@@ -353,10 +357,17 @@ the crop, OCR text, visual candidates and a VLM suggestion. A reviewer assigns t
 promoted crops are added to the confirmed visual gallery used for DINOv2 visual re-ranking (enabled
 by a feature flag). The system improves on its own failure cases without retraining a model.
 
-### Not yet in production
+### Store compliance and monitoring
 
-Shelf zones are drawn on shelf photos in the field app, but automatic **planogram-compliance**
-checking, report export and shelf alerts are on the roadmap, not in production.
+- **Drift-based compliance** — after each store visit, the shelf is compared with that store's own
+  recent history (median and IQR over previous visits). Rules flag a drop in own share of shelf or
+  missing anchor products, and stores are ranked `ok / warning / critical / insufficient_data`,
+  critical first.
+- **Operational alerts** — every 15 minutes a monitor checks photo flow, the share of unknown
+  products and pipeline health, and alerts the team chat.
+
+Not implemented: comparison against a reference planogram image, and business alerts such as "own
+share dropped in store N". Report export is also not in production.
 
 ---
 
