@@ -1,5 +1,7 @@
 # Retail Shelf Detection — Production Retrieval & Multimodal Shelf Intelligence
 
+📖 Full case study: https://swd07.github.io/projects/retail-shelf-detection/
+
 > Technical case-study repository for a live merchandising AI subsystem: offline field capture,
 > detection, OCR/VLM, dense retrieval, visual metric learning, deterministic fusion, guardrails,
 > evaluation and gated production rollout.
