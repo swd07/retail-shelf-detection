@@ -7,7 +7,7 @@
 > evaluation and gated production rollout.
 
 **Portfolio overview:** [ai-platform-portfolio](https://github.com/swd07/ai-platform-portfolio)  
-**Parent product:** [AI Chaban2 — commercial operating platform](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)  
+**Parent product:** [AI Analytical Platform — commercial operating platform](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)  
 **Field-product deep dive:** [Offline Merchandising Terminal](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/merch-terminal.md)
 
 ![Live pipeline output: detected packs, brand/SKU labels, price tags, and explicit unknown abstentions](assets/shelf-detection-live.jpg)
@@ -23,7 +23,7 @@ This is **production engineering with a pilot business rollout**.
 
 - **6,145+ shelf photos** processed in the merchandising subsystem.
 - **5,882 completed analyses** in the audited production queue.
-- Current rollout: **40 retail outlets / 3 merchandising users**.
+- Rollout as of August 2026: **40 retail outlets / 3 merchandising users**.
 - **~320k OCR calls** processed by the production service.
 - **~108k ArcFace shadow evaluations** recorded.
 
@@ -180,7 +180,7 @@ mandatory.
 
 ## OCR / VLM evidence
 
-Each product crop is read by self-hosted **Qwen2.5-VL-72B-AWQ** served through vLLM.
+Each product crop was read by self-hosted **Qwen2.5-VL-72B-AWQ** served through vLLM.
 
 The VLM extracts evidence such as:
 
@@ -320,8 +320,9 @@ weakened controlled production evaluation.
 
 - Fine-tuned ArcFace cross-store **Recall@1: 84.1%** on the audited benchmark.
 - DINOv2 baseline on the same benchmark: **26.4% Recall@1**.
-- Human readability ceiling on the unresolved tail: **76.4% ± 5.8 pp** under a blind,
-  pre-registered protocol.
+- Overall brand-readability ceiling: **76.4% ± 5.8 pp** under a blind, pre-registered
+  protocol — a **65.5%** expert read-rate on the unresolved tail, on top of the 31.6%
+  the pipeline already identified.
 
 ### Production telemetry
 
@@ -334,7 +335,7 @@ weakened controlled production evaluation.
 
 ## Business outputs
 
-Recognition results are not the end product. They feed a merchandising dashboard in the Chaban2
+Recognition results are not the end product. They feed a merchandising dashboard in the AI Analytical Platform
 platform:
 
 - **Share of shelf** — own vs competitor share by facings, per photo, store and brand; stores below
@@ -391,7 +392,7 @@ than asking an LLM to make the final identity decision.
 
 ## My role
 
-For the broader AI Chaban2 platform I was **Head of AI and Technical Owner / platform architect**: I built
+For the broader platform I was **Head of AI and Technical Owner / platform architect**: I built
 the first production versions hands-on, then hired and led a team of **7 engineers** who extended them.
 
 For this merchandising subsystem I owned the technical architecture and production rollout and was
@@ -452,7 +453,7 @@ inflate metrics on correlated shelf crops.
 ## Related work
 
 - **[Full Applied AI / Solutions Architecture portfolio](https://github.com/swd07/ai-platform-portfolio)**
-- **[AI Chaban2 commercial platform case study](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)**
+- **[AI Analytical Platform case study](https://github.com/swd07/ai-platform-portfolio/blob/master/projects/chaban.md)**
 
 Author: **Eduard Kharaev** — [GitHub profile](https://github.com/swd07) ·
 [haraev87@gmail.com](mailto:haraev87@gmail.com) · Telegram [@Edharaev](https://t.me/Edharaev)
