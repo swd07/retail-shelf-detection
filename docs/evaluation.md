@@ -4,11 +4,11 @@ How this pipeline is measured, and the two lessons that shaped the process.
 
 ## Population-level validation, always
 
-A resolver that measured **98% on a curated subset dropped to ~82% on the full
-population**. Curated subsets over-represent clean, canonical crops; production
-is dominated by glare, occlusion and odd angles. Since then no change is
-promoted on subset numbers — validation runs on the full population, before any
-production change.
+A geometric resolver measured **~100% on shelves with enough clean facings**, but only
+**~82–83% per box across 102 ground-truth crops (12 shelves)** — below the 85% bar for
+unattended promotion, so it stayed audit-only. Clean subsets over-represent canonical
+crops; production is dominated by glare, occlusion and odd angles. No change is promoted
+on subset numbers — validation runs on the full population, before any production change.
 
 ## Grouped-by-image splits
 

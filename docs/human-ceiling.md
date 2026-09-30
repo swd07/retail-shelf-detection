@@ -6,7 +6,7 @@ improvement in the same quarter. Part of the [retail shelf detection case study]
 ## The question
 
 Our production pipeline turns retail shelf photos into share-of-shelf analytics
-(~300k detected packs/month). Like every system of this kind it has a long tail
+(~300k detected packs in total). Like every system of this kind it has a long tail
 of "Unknown" boxes. Every planning conversation circled the same question:
 **how much of that tail is our engineering debt, and how much is unreadable data?**
 

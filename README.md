@@ -64,7 +64,7 @@ Native Android field terminal
   → object storage + durable analysis queue
   → async analysis worker
   → GroundingDINO detection
-  → Qwen2.5-VL OCR / package reading
+  → Qwen3-VL-32B (FP8) OCR / package reading
   → Qwen3-Embedding-8B
   → Qdrant dense text retrieval
   → attribute-aware reranking
@@ -180,7 +180,9 @@ mandatory.
 
 ## OCR / VLM evidence
 
-Each product crop was read by self-hosted **Qwen2.5-VL-72B-AWQ** served through vLLM.
+Each product crop was read by self-hosted **Qwen3-VL-32B (FP8)** served through vLLM
+(**Qwen2.5-VL-72B-AWQ** until the May 2026 cutover; afterwards that model stayed only as an
+optional shelf-description supplement).
 
 The VLM extracts evidence such as:
 
@@ -414,7 +416,7 @@ repository focuses on this subsystem and the technical work I did on it personal
 
 ## Stack
 
-`Python` · `FastAPI` · `PyTorch` · `GroundingDINO` · `Qwen2.5-VL-72B-AWQ` ·
+`Python` · `FastAPI` · `PyTorch` · `GroundingDINO` · `Qwen3-VL-32B (FP8)` · `Qwen2.5-VL-72B-AWQ` ·
 `Qwen3-Embedding-8B` · `Qdrant` · `DINOv2 ViT-L/14` · `ArcFace` · `vLLM` ·
 `PostgreSQL` · `MinIO / S3-compatible storage` · `Kotlin` · `Jetpack Compose` ·
 `Room` · `WorkManager` · `Coil` · `Docker` · `systemd / cron` · `NVIDIA H200`

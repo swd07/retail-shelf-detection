@@ -3,12 +3,16 @@
 Visual retrieval over a confirmed-product gallery, and what survived contact
 with evaluation.
 
-## ArcFace head over frozen embeddings
+## Fine-tuned ArcFace for shelf retrieval
 
 Studio packshots and shelf photos live in different visual worlds; retrieval
-from packshot galleries suffered badly. An **ArcFace head trained on frozen
-visual embeddings** closed most of that packshot→shelf gap:
-**R@1 ~19% → ~75%** on the held-out split.
+from packshot galleries suffered badly. A **fine-tuned ArcFace metric-learning
+model** closed most of that packshot→shelf gap: cross-store
+**Recall@1 84.1%** against **26.4%** for the DINOv2 baseline on the audited
+benchmark.
+
+It was rolled out in stages: shadow voting alongside the live DINOv2 KNN first,
+then a stage-1 rollout running in parallel with DINOv2.
 
 ## The re-ranking variant that measured worse — and was killed
 
@@ -16,12 +20,23 @@ A re-ranking variant looked promising in aggregate but **inverted accuracy on
 disputed cases** — exactly the cases it existed for. It was not shipped.
 Negative results are acted on, not archived.
 
-## A dedicated head for one confusion
+## Package type: three mechanisms, none of them global
 
-A long-standing canister-vs-bottle confusion was solved by a small calibrated
-head on visual embeddings: recall on the class went **~14% → mid-90s** at high
-precision, promoted behind a validated per-family allowlist — narrow, named
-scope instead of a global change.
+Package type (canister vs PET bottle vs bucket vs carton) is resolved by three
+separate, independently gated mechanisms:
+
+- **A VLM package-type question** — the vision model reads the package from the
+  crop, and a SKU is assigned only when exactly one candidate in the family
+  carries that package. Audit precision **92.7%**; per-form accuracy on **401
+  crops** was **93% for PET** and **93% for bucket**. Canister families are
+  **excluded** from this path — canister accuracy was only **57%**, most of the
+  error leaking to PET.
+- **A small calibrated head on DINOv2 embeddings** (linear SVC with Platt
+  calibration) for the canister-vs-bottle confusion, run in **shadow** behind a
+  per-family allowlist rather than as a global change.
+- **Box aspect-ratio geometry** for 930 g vs 1900 g canisters — **AUC
+  0.89–0.90**, accuracy **92.4% / 90.8%** on **n = 181**. Relative height alone
+  had measured **AUC 0.53**: the same idea on the wrong feature.
 
 ## Gallery quality doctrine
 
