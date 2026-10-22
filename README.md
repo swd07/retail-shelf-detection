@@ -19,11 +19,11 @@ when the evidence is not strong enough.*
 
 ## Status
 
-This is **production engineering with a pilot business rollout**.
+This is **production engineering, rolled out across the company's entire retail network**.
 
 - **6,145+ shelf photos** processed in the merchandising subsystem.
 - **5,882 completed analyses** in the audited production queue.
-- Rollout as of August 2026: **40 retail outlets / 3 merchandising users**.
+- Rollout: **the company's entire retail network, about 1,500 outlets**.
 - **~320k OCR calls** processed by the production service.
 - **~108k ArcFace shadow evaluations** recorded.
 
